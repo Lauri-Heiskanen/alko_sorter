@@ -1,0 +1,104 @@
+<head>
+  <script type="text/javascript" src="xlsx.full.min.js"></script>
+  <script>
+    const number_of_products_to_render = 20; // this is based on nothing but vibes
+    let currently_rendered_elements = 0;
+    function disable_inputs() {}
+    function enable_inputs() {}
+    function render_products() {} // introduced here so checkbox can see it at load
+    function clear_products() {
+      product_container.innerText = formatted_product_data = "";
+      currently_rendered_elements = 0;
+    }
+
+    window.onload = () => {
+      const product_container = document.getElementById("product_container");
+      const huomioi_pantti_checkbox = document.getElementById("pantti_checkbox");
+
+      disable_inputs = () => {
+        huomioi_pantti_checkbox.disabled = true;
+      };
+
+      enable_inputs = () => {
+        huomioi_pantti_checkbox.disabled = false;
+      };
+
+      const url =
+        "https://www.alko.fi/INTERSHOP/static/WFS/Alko-OnlineShop-Site/-/Alko-OnlineShop/fi_FI/Alkon%20Hinnasto%20Tekstitiedostona/alkon-hinnasto-tekstitiedostona.xlsx";
+      const local_url = "alkon-hinnasto-tekstitiedostona.xlsx";
+
+      fetch(local_url).then((res) => {
+        console.log(res);
+        res.arrayBuffer().then((file) => {
+          const workbook = XLSX.read(file);
+          const unfiltered_data = XLSX.utils.sheet_to_json(workbook["Sheets"]["Alkon Hinnasto Tekstitiedostona"], { range: 3 });
+          const data = unfiltered_data.filter((element) => element["Alkoholi-%"] && element["Hinta"] && element["Pullokoko"] && element["Litrahinta"]);
+
+          data.forEach((element) => {
+            element["alc_cl_per_euro_pantti"] = element["Alkoholi-%"] / element["Litrahinta"];
+          });
+          data.forEach((element) => {
+            element["alc_cl_per_euro"] = element["Alkoholi-%"] / (element["Hinta"] / element["Pullokoko"].split(" ")[0]);
+          });
+
+          data.sort((a, b) => {
+            return b["alc_cl_per_euro"] - a["alc_cl_per_euro"];
+          });
+
+          const data_pantti = data.toSorted((a, b) => {
+            return b["alc_cl_per_euro_pantti"] - a["alc_cl_per_euro_pantti"];
+          });
+
+          render_products = () => {
+            disable_inputs();
+
+            const huomioi_pantti = huomioi_pantti_checkbox.checked;
+            const render_data = huomioi_pantti ? data_pantti : data;
+            const target_number_of_rendered_products =
+              currently_rendered_elements + number_of_products_to_render > render_data.length
+                ? render_data.length
+                : currently_rendered_elements + number_of_products_to_render;
+
+            while (currently_rendered_elements < target_number_of_rendered_products) {
+              const product_element = document.createElement("div");
+              product_element.style = "margin-top: 10px;margin-bottom: 10px; background: lightgray; padding: 10px;";
+              product_element.innerHTML = `
+    <h1">${render_data[currently_rendered_elements]["Nimi"]}</h1>
+    <p>Alkoholi-%: ${render_data[currently_rendered_elements]["Alkoholi-%"]} %</p>
+    <p>Koko: ${render_data[currently_rendered_elements]["Pullokoko"]}</p>
+    <p>Hinta: ${render_data[currently_rendered_elements]["Hinta"]} €</p>
+    <p>Annos / €: ${render_data[currently_rendered_elements][huomioi_pantti ? "alc_cl_per_euro_pantti" : "alc_cl_per_euro"] / 1.6}</p>
+    <p>Tyyppi: ${render_data[currently_rendered_elements]["Tyyppi"]}</p>
+    <a href="https://www.alko.fi/tuotteet/${render_data[currently_rendered_elements]["Numero"]}">https://www.alko.fi/tuotteet/${
+                render_data[currently_rendered_elements]["Numero"]
+              }</a>
+                  `;
+              product_container.appendChild(product_element);
+              currently_rendered_elements += 1;
+            }
+
+            enable_inputs();
+          };
+
+          render_products();
+
+          // if end of page is reached, render more products
+          window.onscroll = () => {
+            if (window.scrollY + window.innerHeight > document.body.offsetHeight) {
+              render_products();
+            }
+          };
+        });
+      });
+    };
+  </script>
+</head>
+<body style="background: darkgray">
+  <div style="margin-top: 10px; margin-bottom: 10px; background: lightgray; padding: 10px" ;>
+    <label
+      >Huomiodaanko pantti?
+      <input type="checkbox" id="pantti_checkbox" disabled onchange="clear_products();render_products()" />
+    </label>
+  </div>
+  <div id="product_container"></div>
+</body>
