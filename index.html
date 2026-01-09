@@ -1,9 +1,14 @@
 <head>
   <script type="text/javascript" src="xlsx.full.min.js"></script>
   <script>
+    const url =
+      "https://www.alko.fi/INTERSHOP/static/WFS/Alko-OnlineShop-Site/-/Alko-OnlineShop/fi_FI/Alkon%20Hinnasto%20Tekstitiedostona/alkon-hinnasto-tekstitiedostona.xlsx";
+    const local_url = "alkon-hinnasto-tekstitiedostona.xlsx";
+
     const number_of_products_to_render = 20; // this is based on nothing but vibes
     let currently_rendered_elements = 0;
     let current_sort_criteria = null;
+    const selected_drink_types = new Set();
     function disable_inputs() {}
     function enable_inputs() {}
     function render_products() {} // introduced here so elements can see it at load
@@ -23,6 +28,7 @@
       const huomioi_pantti_checkbox = document.getElementById("pantti_checkbox");
       const sort_criteria_select = document.getElementById("sort_criteria_select");
       const reverse_sort_direction_checkbox = document.getElementById("reverse_sort_direction_checkbox");
+      const selected_drink_types_div = document.getElementById("selected_drink_types_div");
 
       disable_inputs = () => {
         for (let element of document.getElementsByTagName("input")) {
@@ -46,12 +52,7 @@
 
       current_sort_criteria = sort_criteria_select.options[sort_criteria_select.selectedIndex].value;
 
-      const url =
-        "https://www.alko.fi/INTERSHOP/static/WFS/Alko-OnlineShop-Site/-/Alko-OnlineShop/fi_FI/Alkon%20Hinnasto%20Tekstitiedostona/alkon-hinnasto-tekstitiedostona.xlsx";
-      const local_url = "alkon-hinnasto-tekstitiedostona.xlsx";
-
       fetch(local_url).then((res) => {
-        console.log(res);
         res.arrayBuffer().then((file) => {
           // read, convert and filter data
           const workbook = XLSX.read(file);
@@ -60,15 +61,43 @@
 
           // calculate missing datapoints
           data.forEach((element) => {
-            element["alc_cl_per_euro_pantti"] = element["Alkoholi-%"] / element["Litrahinta"];
+            element["Litrahinta_pantti"] = element["Litrahinta"]; // renaming for consistency
+            element["Litrahinta"] = element["Hinta"] / element["Pullokoko"].split(" ")[0];
           });
           data.forEach((element) => {
-            element["Litrahinta_no_pantti"] = element["Hinta"] / element["Pullokoko"].split(" ")[0];
+            element["alc_cl_per_euro_pantti"] = element["Alkoholi-%"] / element["Litrahinta_pantti"];
           });
           data.forEach((element) => {
-            element["alc_cl_per_euro"] = element["Alkoholi-%"] / element["Litrahinta_no_pantti"];
+            element["alc_cl_per_euro"] = element["Alkoholi-%"] / element["Litrahinta"];
           });
 
+          // add options for each drink type
+          data.forEach((element) => {
+            if (element["Tyyppi"] == undefined) {
+              element["Tyyppi"] = "misc";
+            }
+            if (!selected_drink_types.has(element["Tyyppi"])) {
+              selected_drink_types.add(element["Tyyppi"]);
+              const type_element = document.createElement("label");
+              type_element.hidden = true;
+              type_element.innerHTML = `
+              ${element["Tyyppi"]}
+              <input type="checkbox" id="${element["Tyyppi"]}" onchange="
+                if (selected_drink_types.has('${element["Tyyppi"]}')) {
+                  selected_drink_types.delete('${element["Tyyppi"]}');
+                } else {
+                  selected_drink_types.add('${element["Tyyppi"]}');
+                }
+                on_parameter_change();" 
+              checked
+              disabled/>
+              <br />
+              `;
+              selected_drink_types_div.appendChild(type_element);
+            }
+          });
+
+          // define function used to get a function for getting the correct datapoint for sorting
           const get_sort_value_function = (a) => {
             if (current_sort_criteria == "alc_cl_per_euro") {
               if (huomioi_pantti_checkbox.checked) {
@@ -78,9 +107,9 @@
               }
             } else if (current_sort_criteria == "Litrahinta") {
               if (huomioi_pantti_checkbox.checked) {
-                return (a) => a["Litrahinta"];
+                return (a) => a["Litrahinta_pantti"];
               } else {
-                return (a) => a["Litrahinta_no_pantti"];
+                return (a) => a["Litrahinta"];
               }
             } else if (current_sort_criteria == "Pullokoko") {
               return (a) => a["Pullokoko"].split(" ")[0];
@@ -92,7 +121,7 @@
           // define render function
           render_products = () => {
             // set amount of items to render
-            const target_number_of_rendered_products =
+            let target_number_of_rendered_products =
               currently_rendered_elements + number_of_products_to_render > data.length
                 ? data.length
                 : currently_rendered_elements + number_of_products_to_render;
@@ -100,6 +129,7 @@
             // get sorting value function
             const get_sort_value = get_sort_value_function();
 
+            // sort data
             if (reverse_sort_direction_checkbox.checked) {
               data.sort((a, b) => {
                 return get_sort_value(a) - get_sort_value(b);
@@ -110,25 +140,27 @@
               });
             }
 
-            console.log(get_sort_value(data[0]));
-
             // create and append product elements
             while (currently_rendered_elements < target_number_of_rendered_products) {
-              const product_element = document.createElement("div");
-              product_element.style = "margin-top: 10px;margin-bottom: 10px; background: lightgray; padding: 10px;";
-              product_element.innerHTML = `
-        <h1">${data[currently_rendered_elements]["Nimi"]}</h1>
-        <p>Alkoholi-%: ${data[currently_rendered_elements]["Alkoholi-%"]} %</p>
-        <p>Koko: ${data[currently_rendered_elements]["Pullokoko"]}</p>
-        <p>Hinta: ${data[currently_rendered_elements]["Hinta"]} €</p>
-        <p>Litrahinta: ${data[currently_rendered_elements][huomioi_pantti_checkbox.checked ? "Litrahinta" : "Litrahinta_no_pantti"]}</p>
-        <p>Annos / €: ${data[currently_rendered_elements][huomioi_pantti_checkbox.checked ? "alc_cl_per_euro_pantti" : "alc_cl_per_euro"] / 1.6}</p>
-        <p>Tyyppi: ${data[currently_rendered_elements]["Tyyppi"]}</p>
-        <a href="https://www.alko.fi/tuotteet/${data[currently_rendered_elements]["Numero"]}">https://www.alko.fi/tuotteet/${
-                data[currently_rendered_elements]["Numero"]
-              }</a>
-              `;
-              product_container.appendChild(product_element);
+              if (selected_drink_types.has(data[currently_rendered_elements]["Tyyppi"])) {
+                const product_element = document.createElement("div");
+                product_element.style = "margin-top: 10px;margin-bottom: 10px; background: lightgray; padding: 10px;";
+                product_element.innerHTML = `
+                <h1">${data[currently_rendered_elements]["Nimi"]}</h1>
+                <p>Alkoholi-%: ${data[currently_rendered_elements]["Alkoholi-%"]} %</p>
+                <p>Koko: ${data[currently_rendered_elements]["Pullokoko"]}</p>
+                <p>Hinta: ${data[currently_rendered_elements]["Hinta"]} €</p>
+                <p>Litrahinta: ${data[currently_rendered_elements][huomioi_pantti_checkbox.checked ? "Litrahinta_pantti" : "Litrahinta"]}</p>
+                <p>Annos / €: ${data[currently_rendered_elements][huomioi_pantti_checkbox.checked ? "alc_cl_per_euro_pantti" : "alc_cl_per_euro"] / 1.6}</p>
+                <p>Tyyppi: ${data[currently_rendered_elements]["Tyyppi"]}</p>
+                <a href="https://www.alko.fi/tuotteet/${data[currently_rendered_elements]["Numero"]}">https://www.alko.fi/tuotteet/${
+                  data[currently_rendered_elements]["Numero"]
+                }</a>
+                  `;
+                product_container.appendChild(product_element);
+              } else if (target_number_of_rendered_products < data.length) {
+                target_number_of_rendered_products += 1;
+              }
               currently_rendered_elements += 1;
             }
           };
@@ -157,6 +189,7 @@
       <input type="checkbox" id="pantti_checkbox" onchange="on_parameter_change()" />
     </label>
     <br />
+    <br />
     <label> Järjestys </label>
     <select
       name="sort_criteria"
@@ -175,6 +208,10 @@
       >Reverse order
       <input type="checkbox" id="reverse_sort_direction_checkbox" onchange="on_parameter_change()" />
     </label>
+    <br />
+    <br />
+    <button onclick="for (let element of selected_drink_types_div.children) element.hidden = !element.hidden">Juomatyypit</button>
+    <div name="selected_drink_types" id="selected_drink_types_div"></div>
   </div>
   <div id="product_container"></div>
 </body>
