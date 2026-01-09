@@ -37,6 +37,9 @@
         for (let element of document.getElementsByTagName("select")) {
           element.disabled = true;
         }
+        for (let element of document.getElementsByTagName("button")) {
+          element.disabled = true;
+        }
       };
 
       enable_inputs = () => {
@@ -44,6 +47,9 @@
           element.disabled = false;
         }
         for (let element of document.getElementsByTagName("select")) {
+          element.disabled = false;
+        }
+        for (let element of document.getElementsByTagName("button")) {
           element.disabled = false;
         }
       };
@@ -82,7 +88,7 @@
               type_element.hidden = true;
               type_element.innerHTML = `
               ${element["Tyyppi"]}
-              <input type="checkbox" id="${element["Tyyppi"]}" onchange="
+              <input type="checkbox" value="${element["Tyyppi"]}" onchange="
                 if (selected_drink_types.has('${element["Tyyppi"]}')) {
                   selected_drink_types.delete('${element["Tyyppi"]}');
                 } else {
@@ -210,7 +216,31 @@
     </label>
     <br />
     <br />
-    <button onclick="for (let element of selected_drink_types_div.children) element.hidden = !element.hidden">Juomatyypit</button>
+    <button onclick="for (let label_element of selected_drink_types_div.children) label_element.hidden = !label_element.hidden">Juomatyypit</button>
+    <button
+      onclick="
+      for (let label_element of selected_drink_types_div.children) {
+        if (!label_element.disabled) {
+          label_element.children[0].checked = true;
+          selected_drink_types.add(label_element.children[0].value);
+        }
+      }
+      on_parameter_change()"
+    >
+      Salli kaikki
+    </button>
+    <button
+      onclick="
+      for (let label_element of selected_drink_types_div.children) {
+        if (!label_element.disabled) {
+          label_element.children[0].checked = false;
+          selected_drink_types.delete(label_element.children[0].value);
+        }
+      }
+      on_parameter_change()"
+    >
+      Karsi kaikki
+    </button>
     <div name="selected_drink_types" id="selected_drink_types_div"></div>
   </div>
   <div id="product_container"></div>
